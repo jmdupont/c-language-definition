@@ -1,0 +1,1 @@
+float variable_of_type_float;
