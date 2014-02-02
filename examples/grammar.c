@@ -5,62 +5,182 @@ http://www.lysator.liu.se/c/ANSI-C-grammar-y.html
 This defines the c grammar in C++
 to use for language generation and test generation.
 **/
+
 #define TOKEN(X) Token X( #X );
+#define RULEA(X) Rule _ ## X   ();
+#define RULEB(X) Rule2 X( #X, _ ## X   () );
+#define RULE(X) RULEA(X) RULEB(X)
+
+#include <iostream>
 
 class OutputGenerator
 {
+  OutputGenerator(const OutputGenerator & r); // dont implement
+
  public:
-  OutputGenerator() {}
-  OutputGenerator(const OutputGenerator & r) {}
-  OutputGenerator(const OutputGenerator * p) {}
-  void emit() {}
+ OutputGenerator() {emit();}
+ OutputGenerator(OutputGenerator & r) {
+   r.emit();
+  }
+
+ void emit() const {
+   //std::cout << "TODO" << std::endl;;
+    //throw "TODO";
+  }
+};
+
+ class OutputGeneratorRef{ 
+      const OutputGenerator & r; 
+        public: 
+       OutputGeneratorRef(const OutputGenerator & r): r(r) {emit();} 
+      void emit() { r.emit();  } 
+      }; 
+
+class OutputGeneratorPtr : public OutputGenerator{
+  const OutputGenerator * p;
+ public:
+ OutputGeneratorPtr(const OutputGenerator * p): p(p) {
+    if (p) {
+      p->emit();
+    }
+    emit();
+  }
+
+   void emit() const {
+    std::cout << "PTR:" << std::endl;
+    if(p) { p->emit();}  }
 };
 
 class Pair : public OutputGenerator {
+ protected:
   const OutputGenerator & a;
   const OutputGenerator & b;
  public:
- Pair(const OutputGenerator & a, const OutputGenerator & b):  a(a), b(b) {}   
+ Pair(const OutputGenerator & a, const OutputGenerator & b):  a(a), b(b) {  emit(); }   
+ Pair(const Pair & p):  a(p.a), b(p.b) { emit(); }
+
+
+};
+
+class Rule : public OutputGenerator {
+
+ public:
+  // Rule(const char name [], Rule & func) 
+  //   : name(name), func(func) {      
+  //    func.emit();
+  //}
+ Rule(const Rule & r){
+   //r.emit();
+ };
+
+  // Rule() {}
+  // Rule(OutputGenerator func) :func(func) {}
+  //  Rule & operator = (Rule & r) {    r.emit();  }
+   void emit() const {
+    std::cout << "RULE:" << std::endl;
+    //func.emit();  
+  }
+};
+
+class Or : public Pair { 
+ public :
+ Or(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) {     emit();}   
+  operator Rule(){ emit(); };
+  void emit() const { 
+    a.emit();
+    std::cout << "|";    
+    b.emit();  
+  }
 };
 
 class Plus : public Pair { 
  public :
- Plus(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) {}   
-};
-class Or : public Pair { 
- public :
- Or(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) {}   
+ Plus(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) {     emit();   }   
+  operator Rule() { emit();  }
+
+  void emit() const { 
+
+    a.emit();    
+    std::cout << "+";    
+    b.emit();  
+  }
 };
 
-OutputGenerator operator | (const OutputGenerator & a, const OutputGenerator & b) {  return Or(a,b); }
-
-class Rule : public OutputGenerator {
+class Rule2  : public OutputGenerator {
+    Rule & func;
+    const char * name;
  public:
-  Rule(const char name [], Rule func) {}
-  Rule() {}
-  Rule(OutputGenerator) {}
+ Rule2(const char * name , Rule func) 
+   : name(name), func(func) {      
+      //std::cout << "creating" << std::endl;
+      //emit();
+      //func.emit();
+  }
+   void emit() const {
+     std::cout << "R:" << name << std::endl;
+    func.emit();  
+  }
+  operator Rule () {
+    emit();
+    //return Rule(*this);
+  }
 };
+
+
+Or operator | (const OutputGenerator & a, const OutputGenerator & b) {  return Or(a,b); }
 
 class Token : public OutputGenerator {
  public:
   const char * v;
 
- Token(const char * v)
-   : v(v) 
-  {
+ Token(const char * v)   : v(v)   {  
+    //emit(); 
+    //    std::cout << "Value:" << v << std::endl;
   }
 
-  OutputGenerator operator ()() {}
+   void emit() const {
+     //    std::cout << "TOKEN:" << std::endl;
+    //OutputGenerator::emit();
+     //std::cout << "V:" << v << std::endl;
+     std::cout << "Token" << v;
+  }
 
-  //  OutputGenerator operator + (const Rule & r) const{}
 };
 
 class TokenChar : public OutputGenerator {
  public:
   char v;
- TokenChar(char v)  : v(v) {  }
-  OutputGenerator operator ()() { return OutputGenerator(this); }
+
+ TokenChar(char v)  : v(v) { 
+    emit();
+  }
+  //  OutputGenerator operator ()() { return OutputGeneratorPtr(this); }
+
+ TokenChar(const TokenChar & t): v(t.v) {
+    emit();
+  };
+
+   void emit() const {
+     //std::cout << "TOKENc:" << std::endl;
+    //  OutputGenerator::emit();
+     std::cout  << v ;
+  }
+
 };
+
+
+Plus operator + (const OutputGenerator & a, const OutputGenerator & b ){
+  
+  Plus r = Plus(a,b);  
+  r.emit();
+  return r;
+}
+
+//Plus operator + (const TokenChar & a, const Rule2 & b ){  return Plus(a,b);  }
+
+TokenChar token(const char c) {  
+  return TokenChar(c); 
+} 
 
 
 TOKEN(ADD_ASSIGN)
@@ -122,21 +242,6 @@ TOKEN(VOLATILE)
 TOKEN(WHILE)
 TOKEN(XOR_ASSIGN)
 
-
-OutputGenerator operator + (const OutputGenerator & a, const OutputGenerator & b ){
-  return Plus(a,b);  
-}
-
-TokenChar token(const char c) {  
-  return TokenChar(c); 
-} 
-
-
-
-#define RULEA(X) Rule _ ## X   ();
-#define RULEB(X) Rule X( #X, _ ## X   () );
-
-#define RULE(X) RULEA(X) RULEB(X)
 
 RULE(abstract_declarator)
 RULE(additive_expression)
@@ -203,9 +308,9 @@ RULE(unary_operator)
 RULE(parameter_type_list)
 
 Rule _primary_expression() {
-  return IDENTIFIER()
-    | CONSTANT()
-    | STRING_LITERAL()
+  return IDENTIFIER
+    | CONSTANT
+    | STRING_LITERAL
     | token('(')  + expression + token(')')
     ;
 }
@@ -618,7 +723,8 @@ Rule _function_definition() {
 	;
  }
 
-
 int main() {
-  translation_unit.emit();
+  //  translation_unit.emit();
+  // primary_expression.emit();
+  type_qualifier.emit();
 }

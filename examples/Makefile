@@ -5,7 +5,7 @@ clean : grammar
 grammar : grammar.c
 	g++  -g3 -save-temps grammar.c -o grammar
 
-test: grammar
+test: grammar grammar.c
 	./grammar
 all :
 	gcc -fdump-translation-unit -c *.c
