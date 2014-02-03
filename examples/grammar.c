@@ -17,33 +17,35 @@
 #define RULEC(X) X( #X );
 
 #define RULE3(X) RULEC(X)
-
+#include <tr1/memory>
 #include <iostream>
 
 class OutputObject {
  public:
   OutputObject(){};
-
 };
 
 class OutputGenerator
 {
  protected:
-  const OutputGenerator & r;
+
+  //OutputObject r;
+
  protected:
- OutputGenerator(const OutputGenerator & r):r(r){    }
+
  public:
- OutputGenerator(OutputGenerator & r):r(r) {
-  }
+ OutputGenerator(){}
+ OutputGenerator(const OutputGenerator & d) {}
+ // OutputGenerator(OutputObject r):r(r) {  }
   virtual OutputObject emit() const {
-    std::cout << "BASE{" << std::endl;
+    //std::cout << "BASE{" << std::endl;
     //std::cout << (void*)&r;
-    
-    std::cout << "}ENDBASE" << std::endl;;
+    // std::cout << "}ENDBASE" << std::endl;;
     //throw "TODO";
     return OutputObject ();
   }
 };
+
 
 class None : public OutputGenerator {
   virtual OutputObject emit() const {
@@ -53,57 +55,45 @@ class None : public OutputGenerator {
 } none(none);
 
 
-class Evaluator { 
-  //push (
+typedef std::tr1::shared_ptr<OutputGenerator> OutputGeneratorPtr;
+
+class Ref : public OutputGenerator {
+ protected:
+  OutputGeneratorPtr ptr;
+ public:
+
+ Ref(OutputGenerator & r):
+  ptr(&r) {}
+
+ Ref(Ref & r):
+  ptr(r.ptr) {}
+
+ Ref(const Ref & r):
+  ptr(r.ptr) {}
+
+ public:
+  virtual OutputObject emit() const {
+    if (ptr) {
+      return ptr->emit();
+    }
+    return OutputObject();
+  }
+
+ Ref(OutputGeneratorPtr & ptr) :ptr(ptr) {}
 };
 
-/* class OutputGeneratorRef{ */
-/*   const OutputGenerator & r; */
-/*  public: */
-/*  OutputGeneratorRef(const OutputGenerator & r): r(r) { */
-/*     //emit(); */
-/*   } */
-/*   virtual OutputObject emit() {  */
-/*     //r.emit();   */
-/*   } */
-/* }; */
-
-/* class OutputGeneratorPtr : public OutputGenerator{ */
-/*   const OutputGenerator * p; */
-/*  public: */
-
-/*  OutputGeneratorPtr(const OutputGenerator * p): p(p) { */
-/*     //    if (p) { */
-/*       //p->emit(); */
-/*     //    } */
-/*     //emit(); */
-/*   } */
-
-/*   virtual OutputObject emit() const { */
-/*     std::cout << "PTR:" << std::endl; */
-/*     if(p) { p->emit();} */
-/*   } */
-
-/* }; */
 
 class Pair : public OutputGenerator {
  protected:
-  //  const OutputGenerator & a;
-  const OutputGenerator & b;
+  Ref a;
+  Ref b;
  public:
- Pair(const OutputGenerator & a, const OutputGenerator & b):  
-  OutputGenerator(a), 
-    b(b) {  
-      //emit(); 
-    }
+ Pair(Ref a, Ref b):  
+  a(a), 
+    b(b) {      }
  Pair(const Pair & p)
-   : 
-  OutputGenerator(p.r), 
-    b(p.b) 
-      { 
-        //emit(); 
-      }
-
+   : a(p.a), 
+    b(p.b)       {       }
 
 };
 
@@ -111,62 +101,43 @@ class Rule : public OutputGenerator {
   /*
     will be called as the return from the parse routine
   */
+  OutputGenerator r;
  public:
 
-  // Rule(const char name [], Rule & func)
-  //   : name(name), func(func) {
-  //    func.emit();
-  //}
-
-  //Rule(const Rule & r):r(r){   std::cout << "INIT1:" << std::endl;  };
-
  Rule(const OutputGenerator & r):
-  OutputGenerator(r)
-  {    std::cout << "INIT2:" << std::endl;  };
+  r(r)
+  { 
+    std::cout << "INIT2:{" << std::endl; 
+    r.emit();
+    std::cout << "}INIT2" << std::endl; 
+  };
 
-  // Rule() {}
-  // Rule(OutputGenerator func) :func(func) {}
-  //  Rule & operator = (Rule & r) {    r.emit();  }
   virtual OutputObject emit() const {
     std::cout << "RULE:" << std::endl;
+    r.emit();
     return OutputGenerator::emit();
   }
 
 };
 
 class Rule2  : public OutputGenerator {
-  //  Rule & func;
+  Rule func;
   const char * name;
  public:
-
- Rule2(const char * name , Rule func)
-   : 
-  OutputGenerator(func) ,
-    name(name)
-    {
-
-      //std::cout << "creating" << std::endl;
-      //emit();
-      //func.emit();
-    }
-
+ Rule2(const char * name , Rule func) : func(func), name(name) { }
+  
   virtual OutputObject emit() const {
     std::cout << "R:" << name << std::endl;
-    //r.emit();
+    func.emit();
     return OutputGenerator::emit();
   }
-  //  operator Rule () {   }
-
 };
 
 
 class Rule3 : public OutputGenerator {
   const char * name;
  public:
- Rule3(const char * name )    : 
-  OutputGenerator(none) ,
-    name(name)
-    {}
+ Rule3(const char * name )  :  name(name)    {}
 
   virtual OutputObject emit() const {
     std::cout << "RULE3 " << name << std::endl;
@@ -176,32 +147,29 @@ class Rule3 : public OutputGenerator {
 
 class Or : public Pair {
  public :
- Or(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) {     
-    //emit();
+ Or(const Ref & a, const Ref & b):  Pair(a,b) {
+    /*
+      TOOD : need to copy the data out
+     */
   }
-  //  operator Rule(){   };
 
   virtual OutputObject emit() const {
-    std::cout << "RULEOK{A:" << std::endl;
-    r.emit();
-    std::cout << "} _OR_ {" << std::endl;
+    std::cout << " OR{A:" << std::endl;
+    a.emit();  // TODO the a object information is lost
+    std::cout << "} _OR_ {" << std::endl; 
     b.emit();
-    std::cout << "}" << std::endl;
+    std::cout << "}OR " << std::endl;
     return OutputGenerator::emit();
   }
 };
 
 class Plus : public Pair {
  public :
- Plus(const OutputGenerator & a, const OutputGenerator & b):  Pair(a,b) 
-    {
-      //emit();   
-    }
-  //  operator Rule() {   }
+ Plus(const Ref & a, const Ref & b):  Pair(a,b)     {    }
 
   virtual OutputObject emit() const {
     std::cout << "RULEPLUS{A:" << std::endl;
-    r.emit();
+    a.emit();
     std::cout << "} _PLUS_ {" << std::endl;
     b.emit();
     std::cout << "}" << std::endl;
@@ -209,21 +177,12 @@ class Plus : public Pair {
   }
 };
 
-
-Or operator | (const OutputGenerator & a, const OutputGenerator & b) {  
-  return Or(a,b); }
-
 class Token : public OutputGenerator {
  public:
   const char * v;
 
  Token(const char * v)   : 
-  OutputGenerator(none),
-    v(v)
-    {
-      //emit();
-      //    std::cout << "Value:" << v << std::endl;
-  }
+    v(v)    {  }
 
   virtual OutputObject emit() const {
     //    std::cout << "TOKEN:" << std::endl;
@@ -238,14 +197,14 @@ class TokenChar : public OutputGenerator {
  public:
   char v;
  TokenChar(char v): 
-  OutputGenerator(none), 
+   
     v(v)  {
     //emit();
   }
   //  OutputGenerator operator ()() { return OutputGeneratorPtr(this); }
 
  TokenChar(const TokenChar & t): 
-  OutputGenerator(none),
+  
     v(t.v)
       {
         //emit();
@@ -261,20 +220,84 @@ class TokenChar : public OutputGenerator {
 };
 
 
-Plus operator + (const OutputGenerator & a, const OutputGenerator & b ){
-
-  Plus r = Plus(a,b);
-  //r.emit();
-  return r;
-}
-
-//Plus operator + (const TokenChar & a, const Rule2 & b ){  return Plus(a,b);  }
-
-
-
 TokenChar token(const char c) {
   return TokenChar(c);
 }
+
+Ref operator | (OutputGenerator & a, OutputGenerator & b) { 
+  Ref ar(a);
+  Ref br(b);
+  OutputGeneratorPtr obj(new Or(ar,br));
+  return Ref(obj);
+}
+
+Ref operator | (OutputGenerator & a, Ref b) { 
+  Ref ar(a);
+  OutputGeneratorPtr obj(new Or(ar,b));
+  return Ref(obj);
+}
+
+Ref operator | (Ref a, OutputGenerator & b) { 
+  Ref br(b);
+  OutputGeneratorPtr obj(new Or(a,br));
+  return Ref(obj);
+}
+
+Ref operator | (Ref a, Ref b) { 
+  OutputGeneratorPtr obj(new Or(a,b));
+  return Ref(obj);
+}
+
+Ref operator | (TokenChar a, Ref b) { 
+  OutputGeneratorPtr obj(new Or(a,b));
+  return Ref(obj);
+}
+
+Ref operator | (Ref a, TokenChar b) { 
+  OutputGeneratorPtr obj(new Or(a,b));
+  return Ref(obj);
+}
+
+Ref operator | (TokenChar a, Token b) { 
+  OutputGeneratorPtr obj(new Or(a,b));
+  return Ref(obj);
+}
+
+Ref operator | (TokenChar a, TokenChar b) { 
+  OutputGeneratorPtr obj(new Or(a,b));
+  return Ref(obj);
+}
+
+//Ref operator + (OutputGenerator & a, OutputGenerator & b ){
+//  return Ref(OutputGeneratorPtr (new Plus(a,b)));
+//}
+
+Ref operator + (Rule3 a, TokenChar b ){
+  OutputGeneratorPtr obj(new Plus(a,b));
+  return Ref(obj);
+}
+
+Ref operator + (Ref a, TokenChar b ){
+  OutputGeneratorPtr obj(new Plus(a,b));
+  return Ref(obj);
+}
+
+Ref operator + (Ref a, OutputGenerator & b ){
+  OutputGeneratorPtr obj(new Plus(a,b));
+  return Ref(obj);
+}
+
+Ref operator + (TokenChar a, Rule3 b ){
+  OutputGeneratorPtr obj(new Plus(a,b));
+  return Ref(obj);
+}
+
+Ref operator + (TokenChar a, TokenChar b ){
+  OutputGeneratorPtr obj(new Plus(a,b));
+  return Ref(obj);
+}
+
+
 
 
 
@@ -412,19 +435,9 @@ TokenChar TOKEN_COMMA(',');
 class BaseRule : public OutputGenerator {
   const char * name;
  public:
-  
- BaseRule(const char *name): 
-  OutputGenerator(none),
-    name(name)
-    {}
-
-  //  virtual Rule parse() const {}
-  virtual OutputObject emit() const
-  {
+ BaseRule(const char *name): name(name) {}
+  virtual OutputObject emit() const{
     std::cout << "BaseRule:" << name << std::endl;;
-    //Rule r = parse();
-
-    //r.emit();
     return OutputGenerator::emit();
   }
 };
@@ -915,6 +928,12 @@ int main() {
   //primary_expression.parse();
   //assignment_expression.parse();
   //conditional_expression.parse();
-  Rule r = logical_or_expression.parse();
-  r.emit();
+  //logical_or_expression.parse();
+  //.emit();
+  //logical_or_expression + OR_OP;
+  //Ref ar(a);
+  //OutputGeneratorPtr obj(new 
+  Or a(logical_or_expression , OR_OP);
+  a.emit();
+  //return Ref(obj);
 }
