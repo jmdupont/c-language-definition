@@ -7,15 +7,21 @@
 **/
 
 #define TOKEN(X) Token X( #X );
-#define RULEA(X) Rule _ ## X   ();
+
+#define RULEA(X) class _ ## X \
+  : public Base {			       \
+  public: \
+    Rule<Ref> parse ();	\
+    const char * get_name() { return #X;} \
+  } X;
 
 // create an instance
-//#define RULEB(X) Rule2 X( #X, _ ## X   () );
+//#define RULEB(X) 
+//template<class T> Rule2<T> X( #X,  );
 
-#define RULEB(X) Rule3 X( #X );
-#define RULE(X) RULEA(X) RULEB(X)
+//#define RULEB(X) _ ## X X( #X );
+#define RULE(X) RULEA(X) 
 #define RULEC(X) X( #X );
-
 #define RULE3(X) RULEC(X)
 #include <tr1/memory>
 #include <iostream>
@@ -27,12 +33,6 @@ class OutputObject {
 
 class OutputGenerator
 {
- protected:
-
-  //OutputObject r;
-
- protected:
-
  public:
  OutputGenerator(){}
  OutputGenerator(const OutputGenerator & d) {}
@@ -46,14 +46,12 @@ class OutputGenerator
   }
 };
 
-
 class None : public OutputGenerator {
   virtual OutputObject emit() const {
     std::cout << "NONE" << std::endl;
     return OutputObject();
   }
 } none(none);
-
 
 typedef std::tr1::shared_ptr<OutputGenerator> OutputGeneratorPtr;
 
@@ -65,11 +63,8 @@ class Ref : public OutputGenerator {
  Ref(OutputGenerator & r):
   ptr(&r) {}
 
- Ref(Ref & r):
-  ptr(r.ptr) {}
-
- Ref(const Ref & r):
-  ptr(r.ptr) {}
+  // Ref(Ref r):ptr(r.ptr) {}
+  // Ref(const Ref r):ptr(r.ptr) {}
 
  public:
   virtual OutputObject emit() const {
@@ -82,49 +77,45 @@ class Ref : public OutputGenerator {
  Ref(OutputGeneratorPtr & ptr) :ptr(ptr) {}
 };
 
-
-class Pair : public OutputGenerator {
+class Pair2 : public OutputGenerator {
  protected:
-  Ref a;
-  Ref b;
+  OutputGenerator & a;
+  OutputGenerator & b;
  public:
- Pair(Ref a, Ref b):  
-  a(a), 
-    b(b) {      }
- Pair(const Pair & p)
-   : a(p.a), 
-    b(p.b)       {       }
-
+ Pair2(OutputGenerator & a, OutputGenerator & b):a(a),b(b) {}
+ Pair2(const Pair2 & p):a(p.a),b(p.b){}
 };
 
+template <class T> 
 class Rule : public OutputGenerator {
-  /*
-    will be called as the return from the parse routine
-  */
-  OutputGenerator r;
+  T r;
  public:
-
- Rule(const OutputGenerator & r):
-  r(r)
-  { 
-    std::cout << "INIT2:{" << std::endl; 
-    r.emit();
-    std::cout << "}INIT2" << std::endl; 
-  };
+  Rule(T r) : r(r){};
+ template <class U> Rule(U r) : r(r){};
 
   virtual OutputObject emit() const {
     std::cout << "RULE:" << std::endl;
     r.emit();
     return OutputGenerator::emit();
   }
-
 };
 
-class Rule2  : public OutputGenerator {
-  Rule func;
+class Foo {
+ public:
+  Foo(const char * ) {}
+
+virtual OutputObject emit() const {
+    std::cout << "FOO:" << std::endl;
+    return OutputObject();
+}
+  
+};
+
+template <class T> class Rule2  : public OutputGenerator {
+  T func;
   const char * name;
  public:
- Rule2(const char * name , Rule func) : func(func), name(name) { }
+ Rule2(const char * name , T func) : func(func), name(name) { }
   
   virtual OutputObject emit() const {
     std::cout << "R:" << name << std::endl;
@@ -145,36 +136,50 @@ class Rule3 : public OutputGenerator {
   }
 };
 
-class Or : public Pair {
- public :
- Or(const Ref & a, const Ref & b):  Pair(a,b) {
-    /*
-      TOOD : need to copy the data out
-     */
-  }
+template <class X, class Y> class Pair : public OutputGenerator {
+ protected:
+  X a;
+  Y b;
+ public:
+ Pair(X a, Y b):  
+  a(a), 
+    b(b) {      }
 
-  virtual OutputObject emit() const {
-    std::cout << " OR{A:" << std::endl;
-    a.emit();  // TODO the a object information is lost
-    std::cout << "} _OR_ {" << std::endl; 
-    b.emit();
-    std::cout << "}OR " << std::endl;
-    return OutputGenerator::emit();
-  }
+ Pair(const Pair<X,Y> & p)
+   : a(p.a), 
+    b(p.b)       {       }
+
 };
 
-class Plus : public Pair {
- public :
- Plus(const Ref & a, const Ref & b):  Pair(a,b)     {    }
 
-  virtual OutputObject emit() const {
-    std::cout << "RULEPLUS{A:" << std::endl;
-    a.emit();
-    std::cout << "} _PLUS_ {" << std::endl;
-    b.emit();
-    std::cout << "}" << std::endl;
-    return OutputGenerator::emit();
+
+template <class X, class Y>  class Or : public Pair<X,Y> {
+ public :
+ Or(X  a, Y b):  Pair<X,Y>(a,b) { }
+
+  OutputObject emit() const {
+    Pair<X,Y>::a.emit();
+    std::cout << std::endl << "| " ;
+    Pair<X,Y>::b.emit();
+     return OutputGenerator::emit(); 
   }
+
+};
+
+template <class X, class Y> 
+  class Plus : public Pair<X,Y> {
+ public :
+ Plus(const X & a, const Y & b):  Pair<X,Y>(a,b)     {    }
+
+
+  OutputObject emit() const {
+    Pair<X,Y>::a.emit();
+    std::cout << " ";
+    Pair<X,Y>::b.emit();
+    return OutputGenerator::emit(); 
+  }
+
+
 };
 
 class Token : public OutputGenerator {
@@ -224,82 +229,17 @@ TokenChar token(const char c) {
   return TokenChar(c);
 }
 
-Ref operator | (OutputGenerator & a, OutputGenerator & b) { 
-  Ref ar(a);
-  Ref br(b);
-  OutputGeneratorPtr obj(new Or(ar,br));
+template <class X, class Y>  Ref operator + (X a, Y b) { 
+  OutputGeneratorPtr obj(new Plus<X,Y>(a,b));
   return Ref(obj);
 }
 
-Ref operator | (OutputGenerator & a, Ref b) { 
-  Ref ar(a);
-  OutputGeneratorPtr obj(new Or(ar,b));
+template <class X, class Y>  Ref operator | (X a, Y b) { 
+  OutputGeneratorPtr obj(new Or<X,Y>(a,b));
   return Ref(obj);
 }
 
-Ref operator | (Ref a, OutputGenerator & b) { 
-  Ref br(b);
-  OutputGeneratorPtr obj(new Or(a,br));
-  return Ref(obj);
-}
-
-Ref operator | (Ref a, Ref b) { 
-  OutputGeneratorPtr obj(new Or(a,b));
-  return Ref(obj);
-}
-
-Ref operator | (TokenChar a, Ref b) { 
-  OutputGeneratorPtr obj(new Or(a,b));
-  return Ref(obj);
-}
-
-Ref operator | (Ref a, TokenChar b) { 
-  OutputGeneratorPtr obj(new Or(a,b));
-  return Ref(obj);
-}
-
-Ref operator | (TokenChar a, Token b) { 
-  OutputGeneratorPtr obj(new Or(a,b));
-  return Ref(obj);
-}
-
-Ref operator | (TokenChar a, TokenChar b) { 
-  OutputGeneratorPtr obj(new Or(a,b));
-  return Ref(obj);
-}
-
-//Ref operator + (OutputGenerator & a, OutputGenerator & b ){
-//  return Ref(OutputGeneratorPtr (new Plus(a,b)));
-//}
-
-Ref operator + (Rule3 a, TokenChar b ){
-  OutputGeneratorPtr obj(new Plus(a,b));
-  return Ref(obj);
-}
-
-Ref operator + (Ref a, TokenChar b ){
-  OutputGeneratorPtr obj(new Plus(a,b));
-  return Ref(obj);
-}
-
-Ref operator + (Ref a, OutputGenerator & b ){
-  OutputGeneratorPtr obj(new Plus(a,b));
-  return Ref(obj);
-}
-
-Ref operator + (TokenChar a, Rule3 b ){
-  OutputGeneratorPtr obj(new Plus(a,b));
-  return Ref(obj);
-}
-
-Ref operator + (TokenChar a, TokenChar b ){
-  OutputGeneratorPtr obj(new Plus(a,b));
-  return Ref(obj);
-}
-
-
-
-
+class Base : public OutputGenerator {};
 
 TOKEN(ADD_ASSIGN)
 TOKEN(AND_ASSIGN)
@@ -387,7 +327,16 @@ RULE(expression_statement)
 RULE(external_declaration)
 RULE(function_definition)
 RULE(identifier_list)
+
 RULE(inclusive_or_expression)
+
+/*
+Rule<Ref> _inclusive_or_expression (); 
+Foo inclusive_or_expression(
+			"inclusive_or_expression"
+			);
+*/
+
 RULE(init_declarator)
 RULE(init_declarator_list)
 RULE(initializer)
@@ -437,7 +386,8 @@ class BaseRule : public OutputGenerator {
  public:
  BaseRule(const char *name): name(name) {}
   virtual OutputObject emit() const{
-    std::cout << "BaseRule:" << name << std::endl;;
+    std::cout << "R:" << name << " ";
+
     return OutputGenerator::emit();
   }
 };
@@ -450,7 +400,7 @@ class BaseExpression : public BaseRule {
 class Expression : public BaseExpression {
  public:
  Expression(const char *name): BaseExpression(name) {}
-  Rule parse();
+  Rule<Ref> parse();
 } RULE3(expression);
 
 
@@ -459,39 +409,41 @@ class LogicalExpression : public BaseExpression {
  LogicalExpression(const char *name): BaseExpression(name) {}
 };
 
-class LogicalOrExpression : public LogicalExpression {
- public:
- LogicalOrExpression(const char *name): LogicalExpression(name) {}
-  Rule parse();
-} RULE3(logical_or_expression)
-
-
 class LogicalAndExpression : public LogicalExpression {
  public:
  LogicalAndExpression(const char *name): LogicalExpression(name) {}
-  Rule parse();
-  } RULE3(logical_and_expression)
+Rule<Ref> parse();
+} RULE3(logical_and_expression);
 
-  Rule LogicalAndExpression::parse() {
-    return inclusive_or_expression
-      | (logical_and_expression + AND_OP + inclusive_or_expression)
-      ;
-    }
+// -----------------------------------------------------------
+class LogicalOrExpression : public LogicalExpression {
+ public:
+ LogicalOrExpression(const char *name): LogicalExpression(name) {}
+  Rule<Ref> parse();
+} RULE3(logical_or_expression);
 
-
-Rule LogicalOrExpression::parse() {
+Rule<Ref> LogicalOrExpression::parse() {
   return logical_and_expression
     | (logical_or_expression + OR_OP +  logical_and_expression)
     ;
 }
 
+// -----------------------------------------------------------
+Rule<Ref> LogicalAndExpression::parse() {
+  return inclusive_or_expression
+    | (logical_and_expression + AND_OP + inclusive_or_expression)
+    ;
+}
+
+// -----------------------------------------------------------
+
 class ConditionalExpression : public BaseExpression {
  public:
  ConditionalExpression(const char *name): BaseExpression(name) {}
-  Rule parse();
+Rule<Ref> parse();
 } RULE3(conditional_expression);
 
-Rule ConditionalExpression::parse()
+Rule<Ref> ConditionalExpression::parse()
 {
   return logical_or_expression
     | (logical_or_expression + TOKEN_QUESTION + expression + TOKEN_COLON + conditional_expression);
@@ -500,17 +452,17 @@ Rule ConditionalExpression::parse()
 class AssignmentExpression : public BaseExpression {
  public:
  AssignmentExpression(const char *name): BaseExpression(name) {}
-  Rule parse();
+Rule<Ref> parse();
 } RULE3(assignment_expression);
 
-Rule AssignmentExpression::parse()   {
+Rule<Ref> AssignmentExpression::parse()   {
   return
     conditional_expression
     | (unary_expression +  assignment_operator + assignment_expression)
     ;
 };
 
-Rule Expression::parse()
+Rule<Ref> Expression::parse()
 {
   return assignment_expression
     | (expression + TOKEN_COMMA + assignment_expression)
@@ -521,7 +473,7 @@ class PrimaryExpression : public Expression
 {
  public:
  PrimaryExpression(const char *name): Expression(name) {}
-  Rule parse()   {
+  Rule<Ref> parse()   {
     return IDENTIFIER
       | CONSTANT
       | STRING_LITERAL
@@ -533,7 +485,7 @@ class PrimaryExpression : public Expression
 
 
 
-Rule  _postfix_expression() {
+Rule<Ref>  _postfix_expression::parse() {
   return primary_expression
     | (postfix_expression + token('[') + expression + token(']'))
     | (postfix_expression + TOKEN_OPEN_PAREN + TOKEN_CLOSE_PAREN)
@@ -545,14 +497,16 @@ Rule  _postfix_expression() {
     ;
 }
 
-Rule _argument_expression_list() {
+//Rule<Ref>  _
+
+Rule<Ref>  _argument_expression_list::parse() {
   return assignment_expression
     | (argument_expression_list + TOKEN_COMMA + assignment_expression)
     ;
 }
 
 
-Rule _unary_expression()
+Rule<Ref>  _unary_expression()
 {
   return
     postfix_expression
@@ -565,13 +519,13 @@ Rule _unary_expression()
 }
 
 
-Rule _cast_expression() {
+Rule<Ref>  _cast_expression::parse() {
   return unary_expression
     | (TOKEN_OPEN_PAREN + type_name + TOKEN_CLOSE_PAREN + cast_expression);
 
 }
 
-Rule _unary_operator() {
+Rule<Ref>  _unary_operator::parse() {
   return token('&')
     |  token('*')
     |  TOKEN_PLUS
@@ -581,7 +535,7 @@ Rule _unary_operator() {
     ;}
 
 
-Rule _multiplicative_expression() {
+Rule<Ref>  _multiplicative_expression::parse() {
   return cast_expression
     | (multiplicative_expression + token('*') + cast_expression)
     | (multiplicative_expression + token('/') + cast_expression)
@@ -589,21 +543,21 @@ Rule _multiplicative_expression() {
     ;
 }
 
-Rule _additive_expression() {
+Rule<Ref>  _additive_expression::parse() {
   return multiplicative_expression
     | (additive_expression + TOKEN_PLUS + multiplicative_expression)
     | (additive_expression + token('-') + multiplicative_expression)
     ;
 }
 
-Rule _shift_expression() {
+Rule<Ref>  _shift_expression::parse() {
   return additive_expression
     | (shift_expression + LEFT_OP + additive_expression)
     | (shift_expression + RIGHT_OP + additive_expression)
     ;
 }
 
-Rule _relational_expression() {
+Rule<Ref>  _relational_expression::parse() {
   return shift_expression
     | (relational_expression + token('<') + shift_expression)
     | (relational_expression + token('>') + shift_expression)
@@ -611,32 +565,33 @@ Rule _relational_expression() {
     | (relational_expression + GE_OP + shift_expression)
     ;
 }
-Rule _equality_expression() {
+
+Rule<Ref>  _equality_expression::parse() {
   return relational_expression
     | (equality_expression + EQ_OP  +relational_expression)
     | (equality_expression + NE_OP  + relational_expression)
     ;
 }
 
-Rule _and_expression() {
+Rule<Ref>  _and_expression::parse() {
   return (equality_expression)
     | (and_expression + token('&') + equality_expression)
     ;
 }
 
-Rule _exclusive_or_expression() {
+Rule<Ref>  _exclusive_or_expression::parse() {
     return (and_expression)
       | (exclusive_or_expression + token('^') + and_expression)
     ;
 }
 
-Rule _inclusive_or_expression() {
+Rule<Ref>  _inclusive_or_expression() {
       return (exclusive_or_expression)
         | (inclusive_or_expression + token('|') + exclusive_or_expression)
         ;
 }
 
-Rule _assignment_operator() {
+Rule<Ref>  _assignment_operator::parse() {
   return token('=')
     | MUL_ASSIGN
     | DIV_ASSIGN
@@ -651,16 +606,18 @@ Rule _assignment_operator() {
     ;
 }
 
-Rule _constant_expression() {
+Rule<Ref>  _constant_expression::parse() {
   return conditional_expression
     ;
 }
-Rule _declaration() {
+
+Rule<Ref>  _declaration::parse() {
   return (declaration_specifiers + token(';'))
     | (declaration_specifiers + init_declarator_list + token(';'))
     ;
 }
-Rule _declaration_specifiers() {
+
+Rule<Ref>  _declaration_specifiers::parse() {
     return (storage_class_specifier)
     | (storage_class_specifier + declaration_specifiers)
     | (type_specifier)
@@ -669,17 +626,20 @@ Rule _declaration_specifiers() {
       | (type_qualifier + declaration_specifiers)
     ;
 }
-Rule _init_declarator_list() {
+
+Rule<Ref>  _init_declarator_list() {
       return (init_declarator)
         | (init_declarator_list + TOKEN_COMMA + init_declarator)
     ;
 }
-Rule _init_declarator() {
+
+Rule<Ref>  _init_declarator() {
         return (declarator)
           | (declarator + token('=') + initializer)
     ;
 }
-Rule _storage_class_specifier() {
+
+Rule<Ref>  _storage_class_specifier::parse() {
   return TYPEDEF
     | EXTERN
     | STATIC
@@ -687,7 +647,8 @@ Rule _storage_class_specifier() {
     | REGISTER
     ;
 }
-Rule _type_specifier() {
+
+Rule<Ref>  _type_specifier::parse() {
   return VOID
     | CHAR
     | SHORT
@@ -702,71 +663,84 @@ Rule _type_specifier() {
     | TYPE_NAME
     ;
 }
-Rule _struct_or_union_specifier() {
+
+Rule<Ref>  _struct_or_union_specifier::parse() {
   return (struct_or_union + IDENTIFIER + token('{') + struct_declaration_list + token('}'))
     | (struct_or_union + token('{') + struct_declaration_list + token('}'))
     | (struct_or_union + IDENTIFIER)
     ;
 }
-Rule _struct_or_union() {
+
+Rule<Ref>  _struct_or_union::parse() {
   return STRUCT
     | UNION
     ;
 }
-Rule _struct_declaration_list() {
+
+Rule<Ref>  _struct_declaration_list::parse() {
   return (struct_declaration)
   | (struct_declaration_list + struct_declaration)
     ;
 }
-Rule _struct_declaration() {
+
+Rule<Ref>  _struct_declaration::parse() {
   return specifier_qualifier_list + struct_declarator_list + token(';')
     ;
 }
-Rule _specifier_qualifier_list() {
+
+Rule<Ref>  _specifier_qualifier_list::parse() {
   return (type_specifier + specifier_qualifier_list)
     | (type_specifier)
     | (type_qualifier + specifier_qualifier_list)
     | (type_qualifier)
     ;
 }
-Rule _struct_declarator_list() {
+
+Rule<Ref>  _struct_declarator_list::parse() {
   return (struct_declarator)
     | (struct_declarator_list + TOKEN_COMMA + struct_declarator)
     ;
 }
-Rule _struct_declarator() {
+
+Rule<Ref>  _struct_declarator::parse() {
   return (declarator)
     | (TOKEN_COLON + constant_expression)
     | (declarator + TOKEN_COLON + constant_expression)
     ;
 }
-Rule _enum_specifier() {
+
+Rule<Ref>  _enum_specifier::parse() {
   return (ENUM + token('{') + enumerator_list + token('}'))
     | (ENUM + IDENTIFIER + token('{') + enumerator_list + token('}'))
     | (ENUM + IDENTIFIER)
     ;
 }
-Rule _enumerator_list() {
+
+Rule<Ref>  _enumerator_list::parse() {
   return (enumerator)
     | (enumerator_list + TOKEN_COMMA + enumerator)
     ;
 }
-Rule _enumerator() {
+
+Rule<Ref>  _enumerator::parse() {
     return (IDENTIFIER)
       | (IDENTIFIER + token('=') + constant_expression)
     ;
 }
-Rule _type_qualifier() {
+
+Rule<Ref>  _type_qualifier::parse() {
   return CONST
     | VOLATILE
     ;
 }
-Rule _declarator() {
+
+Rule<Ref>  _declarator::parse() {
   return (pointer + direct_declarator)
     | direct_declarator
     ;
 }
-Rule _direct_declarator() {
+
+Rule<Ref>  _direct_declarator::parse() {
   return (IDENTIFIER)
     | (TOKEN_OPEN_PAREN + declarator + TOKEN_CLOSE_PAREN)
     | (direct_declarator + token('[') + constant_expression + token(']'))
@@ -776,52 +750,60 @@ Rule _direct_declarator() {
     | (direct_declarator + TOKEN_OPEN_PAREN +  TOKEN_CLOSE_PAREN)
     ;
 }
-Rule _pointer() {
+
+Rule<Ref>  _pointer::parse() {
   return (token('*'))
     | (token('*') + type_qualifier_list)
     | (token('*') + pointer)
     | (token('*') + type_qualifier_list + pointer)
     ;
 }
-Rule _type_qualifier_list() {
+
+Rule<Ref>  _type_qualifier_list::parse() {
   return (type_qualifier)
     | (type_qualifier_list + type_qualifier)
     ;
 }
 
-Rule _parameter_type_list() {
+Rule<Ref>  _parameter_type_list::parse() {
   return (parameter_list)
     | (parameter_list + TOKEN_COMMA + ELLIPSIS)
     ;
 }
-Rule _parameter_list() {
+
+Rule<Ref>  _parameter_list::parse() {
   return (parameter_declaration)
     | (parameter_list + TOKEN_COMMA + parameter_declaration)
     ;
 }
-Rule _parameter_declaration() {
+
+Rule<Ref>  _parameter_declaration::parse() {
     return (declaration_specifiers + declarator)
     | (declaration_specifiers + abstract_declarator)
       | (declaration_specifiers)
     ;
 }
-Rule _identifier_list() {
+
+Rule<Ref>  _identifier_list() {
       return (IDENTIFIER)
         | (identifier_list + TOKEN_COMMA + IDENTIFIER)
     ;
 }
-Rule _type_name() {
+
+Rule<Ref>  _type_name() {
         return (specifier_qualifier_list)
           | (specifier_qualifier_list + abstract_declarator)
     ;
 }
-Rule _abstract_declarator() {
+
+Rule<Ref>  _abstract_declarator() {
           return (pointer)
     | (direct_abstract_declarator)
             | (pointer + direct_abstract_declarator)
     ;
 }
-Rule _direct_abstract_declarator() {
+
+Rule<Ref>  _direct_abstract_declarator::parse() {
   return (TOKEN_OPEN_PAREN + abstract_declarator + TOKEN_CLOSE_PAREN)
     | (token('[') +  token(']'))
     | (token('[') + constant_expression + token(']'))
@@ -833,18 +815,21 @@ Rule _direct_abstract_declarator() {
     | (direct_abstract_declarator + TOKEN_OPEN_PAREN + parameter_type_list + TOKEN_CLOSE_PAREN)
     ;
 }
-Rule _initializer() {
+
+Rule<Ref>  _initializer::parse() {
   return (assignment_expression)
     | (token('{') + initializer_list + token('}'))
     | (token('{') + initializer_list + TOKEN_COMMA +  token('}'))
     ;
 }
-Rule _initializer_list() {
+
+Rule<Ref>  _initializer_list::parse() {
     return (initializer)
       | (initializer_list + TOKEN_COMMA + initializer)
     ;
 }
-Rule _statement() {
+
+Rule<Ref>  _statement::parse() {
   return labeled_statement
     | compound_statement
     | expression_statement
@@ -853,48 +838,56 @@ Rule _statement() {
     | jump_statement
     ;
 }
-Rule _labeled_statement() {
+
+Rule<Ref>  _labeled_statement::parse() {
   return (IDENTIFIER + TOKEN_COLON + statement)
     | (CASE + constant_expression + TOKEN_COLON + statement)
         | (DEFAULT + TOKEN_COLON + statement)
     ;
 }
-Rule _compound_statement() {
+
+Rule<Ref>  _compound_statement::parse() {
   return (token('{') +  token('}'))
     | (token('{') + statement_list + token('}'))
     | (token('{') + declaration_list + token('}'))
     | (token('{') + declaration_list + statement_list + token('}'))
     ;
 }
-Rule _declaration_list() {
+
+Rule<Ref>  _declaration_list::parse() {
     return (declaration)
       | (declaration_list + declaration)
     ;
 }
-Rule _statement_list() {
+
+Rule<Ref>  _statement_list::parse() {
   return (statement)
     | (statement_list + statement)
     ;
 }
-Rule _expression_statement() {
+
+Rule<Ref>  _expression_statement::parse() {
   return token(';')
     | (expression + token(';'))
     ;
 }
-Rule _selection_statement() {
+
+Rule<Ref>  _selection_statement::parse() {
   return (IF + TOKEN_OPEN_PAREN + expression + TOKEN_CLOSE_PAREN + statement)
     | (IF + TOKEN_OPEN_PAREN + expression + TOKEN_CLOSE_PAREN + statement + ELSE + statement)
     | (SWITCH + TOKEN_OPEN_PAREN + expression + TOKEN_CLOSE_PAREN + statement)
     ;
 }
-Rule _iteration_statement() {
+
+Rule<Ref>  _iteration_statement::parse() {
     return (WHILE + TOKEN_OPEN_PAREN + expression + TOKEN_CLOSE_PAREN + statement)
     | (DO + statement + WHILE + TOKEN_OPEN_PAREN + expression + TOKEN_CLOSE_PAREN +  token(';'))
     | (FOR + TOKEN_OPEN_PAREN + expression_statement + expression_statement + TOKEN_CLOSE_PAREN + statement)
       | (FOR + TOKEN_OPEN_PAREN + expression_statement + expression_statement + expression + TOKEN_CLOSE_PAREN + statement)
     ;
 }
-Rule _jump_statement() {
+
+Rule<Ref>  _jump_statement::parse() {
   return (GOTO + IDENTIFIER + token(';'))
     | (CONTINUE + token(';'))
     | (BREAK + token(';'))
@@ -902,19 +895,20 @@ Rule _jump_statement() {
     | (RETURN + expression + token(';'))
     ;
 }
-Rule _translation_unit() {
+
+Rule<Ref>  _translation_unit::parse() {
   return (external_declaration)
   | (translation_unit + external_declaration)
     ;
 }
 
-Rule _external_declaration() {
+Rule<Ref>  _external_declaration::parse() {
   return (function_definition)
     | (declaration)
     ;
 }
 
-Rule _function_definition() {
+Rule<Ref>  _function_definition::parse() {
   return (declaration_specifiers + declarator + declaration_list + compound_statement)
     | (declaration_specifiers + declarator + compound_statement)
     | (declarator + declaration_list + compound_statement)
@@ -922,18 +916,13 @@ Rule _function_definition() {
     ;
 }
 
+
 int main() {
-  //  translation_unit.emit();
-  //type_qualifier.emit();
-  //primary_expression.parse();
-  //assignment_expression.parse();
-  //conditional_expression.parse();
-  //logical_or_expression.parse();
-  //.emit();
-  //logical_or_expression + OR_OP;
-  //Ref ar(a);
-  //OutputGeneratorPtr obj(new 
-  Or a(logical_or_expression , OR_OP);
-  a.emit();
-  //return Ref(obj);
+  translation_unit.parse().emit();
+  type_qualifier.parse().emit();
+  primary_expression.parse().emit();
+  assignment_expression.parse().emit();
+  conditional_expression.parse().emit();
+  logical_and_expression.parse().emit();
+  logical_or_expression.parse().emit();
 }
